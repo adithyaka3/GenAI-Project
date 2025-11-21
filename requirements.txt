@@ -1,0 +1,15 @@
+PyMuPDF
+pandas
+numpy
+git+https://github.com/facebookresearch/nougat
+pypdfium2
+transformers
+torch
+accelerate
+bitsandbytes
+tqdm
+langchain
+langchain-huggingface
+accelerate
+bitsandbytes
+pydantic

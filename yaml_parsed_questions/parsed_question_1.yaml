@@ -1,0 +1,59 @@
+global_context: ''
+problems:
+  Problem 1:
+    content: 'Generate an image x of size M×M (M=256) using three sinusoidal components:'
+    subproblems:
+      (a):
+        content: x1(m,n) = sin(2π⋅12⋅m/M)
+        sub_subproblems:
+          i.:
+            content: x2(m,n) = sin(2π⋅8⋅n/M)
+          ii.:
+            content: x3(m,n) = sin(2π(6⋅m+10⋅n)/M)
+          iii.:
+            content: x(m,n) = (x1(m,n)+x2(m,n)+x3(m,n))/3
+  Problem 2:
+    content: 'Compute the centered 2D DFT of x(m,n). Plot the results in a single figure showing:'
+    subproblems:
+      (a):
+        content: The image of the sinusoidal component x1(m,n)
+        sub_subproblems: {}
+      (b):
+        content: The image of the sinusoidal component x2(m,n)
+        sub_subproblems: {}
+      (c):
+        content: The image of the sinusoidal component x3(m,n)
+        sub_subproblems: {}
+      (d):
+        content: The combined image x(m,n)
+        sub_subproblems: {}
+      (e):
+        content: The magnitude of the 2D DFT of the combined image
+        sub_subproblems: {}
+      (f):
+        content: Explain the contribution of each individual sinusoid to the combined image magnitude spectrum.
+        sub_subproblems: {}
+  Problem 3:
+    content: 'Design directional filters of size M×M (M=256) for given angular ranges using the expression above. Apply each filter to the DFT of the combined image (X(u,v)) reconstruct the filtered images using the inverse DFT, visualize the results and comment on the observations. For each directional filter, display the following in a single figure:'
+    subproblems:
+      (a):
+        content: The original image.
+        sub_subproblems: {}
+      (b):
+        content: The original image magnitude spectrum.
+        sub_subproblems: {}
+      (c):
+        content: The directional filter magnitude spectrum.
+        sub_subproblems: {}
+      (d):
+        content: The filtered magnitude spectrum.
+        sub_subproblems: {}
+      (e):
+        content: The reconstructed filtered image.
+        sub_subproblems: {}
+      (f):
+        content: 'Filter definitions: H1(u,v) = H(u,v;-20°,20°), H2(u,v) = H(u,v;70°,110°), H3(u,v) = H(u,v;25°,65°), H4(u,v) = max(H1(u,v),H2(u,v),H3(u,v)), element-wise max ∀u<M, ∀v<M'
+        sub_subproblems: {}
+  Problem 4:
+    content: Compute the Mean Squared Error (MSE) between the original and each filtered output and comment on their values.
+    subproblems: {}
