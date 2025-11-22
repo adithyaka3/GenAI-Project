@@ -1,3 +1,4 @@
 offload/
 __pycache__/
 myenv/
+.env
