@@ -13,3 +13,6 @@ langchain-huggingface
 accelerate
 bitsandbytes
 pydantic
+boto3
+botocore
+pyyaml

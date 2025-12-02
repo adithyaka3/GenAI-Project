@@ -1,59 +1,70 @@
-global_context: ''
 problems:
   Problem 1:
-    content: 'Generate an image x of size M×M (M=256) using three sinusoidal components:'
+    content: 'Directional filtering is used to emphasize or suppress frequency components along specific orientations in the frequency domain. For an \(M\times N\) centered Discrete Fourier Transform (DFT) spectrum, the angle of each frequency component relative to the center of the spectrum is given by:
+
+
+      \[\theta(u,v)=\tan^{-1}\Biggl{(}\frac{v-\frac{N}{2}}{u-\frac{M}{2}}\Biggr{)}\]
+
+      A directional filter \(H(u,v)\) can then be defined as:
+
+
+      \[H(u,v;\theta_{\min},\theta_{\max})=\begin{cases}1,&\text{if }\theta_{\min}\leq \theta(u,v)\leq\theta_{\max}\\ 0,&\text{otherwise}\end{cases}\]
+
+
+      Here, \(\theta_{\min}\) and \(\theta_{\max}\) specify the angular range of frequencies to be retained.'
     subproblems:
       (a):
-        content: x1(m,n) = sin(2π⋅12⋅m/M)
+        content: "Generate an image \\(x\\) of size \\(M\\times M\\) (\\(M=256\\)) using three sinusoidal components: \\[x_{1}(m,n) =\\sin\\Bigl{(}\\frac{2\\pi\\cdot 12\\,m}{M}\\Bigr{)},\\] \\[x_{2}(m,n) =\\sin\\Bigl{(}\\frac{2\\pi\\cdot 8\\,n}{M}\\Bigr{)},\\] \\[x_{3}(m,n) =\\sin\\Bigl{(}\\frac{2\\pi(6\\,m+10\\,n)}{M}\\Bigr{)},\\] \\[x(m,n) =\\frac{x_{1}(m,n)+x_{2}(m,n)+x_{3}(m,n)}{3}.\\]\n        Compute the centered 2D DFT of \\(x(m,n)\\). Plot the results in a single figure showing:"
+        answerable: true
+        output_format: image
         sub_subproblems:
           i.:
-            content: x2(m,n) = sin(2π⋅8⋅n/M)
+            content: The image of the sinusoidal component \(x_{1}(m,n)\)
+            answerable: true
+            output_format: image
           ii.:
-            content: x3(m,n) = sin(2π(6⋅m+10⋅n)/M)
+            content: The image of the sinusoidal component \(x_{2}(m,n)\)
+            answerable: true
+            output_format: image
           iii.:
-            content: x(m,n) = (x1(m,n)+x2(m,n)+x3(m,n))/3
-  Problem 2:
-    content: 'Compute the centered 2D DFT of x(m,n). Plot the results in a single figure showing:'
-    subproblems:
-      (a):
-        content: The image of the sinusoidal component x1(m,n)
-        sub_subproblems: {}
+            content: The image of the sinusoidal component \(x_{3}(m,n)\)
+            answerable: true
+            output_format: image
+          iv.:
+            content: The combined image \(x(m,n)\)
+            answerable: true
+            output_format: image
+          v.:
+            content: The magnitude of the 2D DFT of the combined image
+            answerable: true
+            output_format: image
       (b):
-        content: The image of the sinusoidal component x2(m,n)
-        sub_subproblems: {}
+        content: 'Design directional filters of size \(M\times M\) (\(M=256\)) for given angular ranges using the expression above. Apply each filter to the DFT of the combined image (\(X(u,v)\)) reconstruct the filtered images using the inverse DFT, visualize the results and comment on the observations. For each directional filter, display the following in a single figure:'
+        answerable: true
+        output_format: image+text
+        sub_subproblems:
+          '1.':
+            content: The original image.
+            answerable: true
+            output_format: image
+          '2.':
+            content: The original image magnitude spectrum.
+            answerable: true
+            output_format: image
+          '3.':
+            content: The directional filter magnitude spectrum.
+            answerable: true
+            output_format: image
+          '4.':
+            content: The filtered magnitude spectrum.
+            answerable: true
+            output_format: image
+          '5.':
+            content: The reconstructed filtered image.
+            answerable: true
+            output_format: image
       (c):
-        content: The image of the sinusoidal component x3(m,n)
+        content: Compute the Mean Squared Error (MSE) between the original and each filtered output and comment on their values.
+        answerable: true
+        output_format: text
         sub_subproblems: {}
-      (d):
-        content: The combined image x(m,n)
-        sub_subproblems: {}
-      (e):
-        content: The magnitude of the 2D DFT of the combined image
-        sub_subproblems: {}
-      (f):
-        content: Explain the contribution of each individual sinusoid to the combined image magnitude spectrum.
-        sub_subproblems: {}
-  Problem 3:
-    content: 'Design directional filters of size M×M (M=256) for given angular ranges using the expression above. Apply each filter to the DFT of the combined image (X(u,v)) reconstruct the filtered images using the inverse DFT, visualize the results and comment on the observations. For each directional filter, display the following in a single figure:'
-    subproblems:
-      (a):
-        content: The original image.
-        sub_subproblems: {}
-      (b):
-        content: The original image magnitude spectrum.
-        sub_subproblems: {}
-      (c):
-        content: The directional filter magnitude spectrum.
-        sub_subproblems: {}
-      (d):
-        content: The filtered magnitude spectrum.
-        sub_subproblems: {}
-      (e):
-        content: The reconstructed filtered image.
-        sub_subproblems: {}
-      (f):
-        content: 'Filter definitions: H1(u,v) = H(u,v;-20°,20°), H2(u,v) = H(u,v;70°,110°), H3(u,v) = H(u,v;25°,65°), H4(u,v) = max(H1(u,v),H2(u,v),H3(u,v)), element-wise max ∀u<M, ∀v<M'
-        sub_subproblems: {}
-  Problem 4:
-    content: Compute the Mean Squared Error (MSE) between the original and each filtered output and comment on their values.
-    subproblems: {}

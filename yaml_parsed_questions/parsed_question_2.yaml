@@ -1,55 +1,73 @@
-global_context: 'GAUSSIAN BLURRING AND INVERSE FILTERING:'
 problems:
   Problem 1:
-    content: Read the image buildings.jpg. Design a Gaussian kernel of size 13×13 with standard deviation σ=2.5. Apply the blur in the frequency domain and reconstruct the blurred image using the inverse DFT.
-    subproblems: {}
-  Problem 2:
-    content: 'For the Gaussian kernel compute and plot in a single figure and comment on your observations:'
+    content: '**Gaussian Blurring and Inverse Filtering:**
+
+      Gaussian blurring is a common technique to smooth an image and attenuate high-frequency components. A Gaussian kernel of size \(k\times k\) and standard deviation \(\sigma\) is defined as:
+
+
+      \[G(x,y)=K\exp\Bigg{(}-\frac{x^{2}+y^{2}}{2\sigma^{2}}\Bigg{)},\quad\text{with \(K\( chosen such that }\sum_{x,y}G(x,y)=1\]'
     subproblems:
       (a):
-        content: Its centered 2D DFT magnitude spectrum (13×13-point DFT).
+        content: Read the image buildings.jpg. Design a Gaussian kernel of size \(13\times 13\) with standard deviation \(\sigma=2.5\). Apply the blur in the frequency domain and reconstruct the blurred image using the inverse DFT.
+        answerable: true
+        output_format: image
         sub_subproblems: {}
       (b):
-        content: The inverse centered magnitude spectrum 1/(∣H(u,v)∣+ε), with ε=10^-3.
-        sub_subproblems: {}
-      (c):
-        content: The centered 2D DFT magnitude spectrum (1036×1036-point DFT).
-        sub_subproblems: {}
-      (d):
-        content: The inverse centered magnitude spectrum 1/(∣H(u,v)∣+ε).
-        sub_subproblems: {}
-  Problem 3:
-    content: 'Gaussian frequency response fit:'
-    subproblems:
-      (a):
-        content: 'The frequency-domain representation of a Gaussian kernel can be modeled as:'
+        content: 'For the Gaussian kernel compute and plot in a single figure and comment on your observations:'
+        answerable: true
+        output_format: image+text
         sub_subproblems:
           i.:
-            content: H\_cont(u,v)=exp(-k*(U²+V²)), U=u-(M−1)/2, V=v-(N−1)/2
+            content: Its centered 2D DFT magnitude spectrum (13\(\times\)13-point DFT).
+            answerable: true
+            output_format: image
           ii.:
-            content: where k is a parameter to be optimized to best fit the magnitude response of a given kernel, H\_cont(u,v) is the centered magnitude response and M×N are the dimensions of the DFT.
-      (b):
-        content: 'Sweep k over the range 10^-6 to 10^-3 and find the value that minimizes the error:'
+            content: The inverse centered magnitude spectrum \(1/(|H(u,v)|+\epsilon)\), with \(\epsilon=10^{-3}\).
+            answerable: true
+            output_format: image
+          iii.:
+            content: The centered 2D DFT magnitude spectrum (1036\(\times\)1036-point DFT).
+            answerable: true
+            output_format: image
+          iv.:
+            content: The inverse centered magnitude spectrum \(1/(|H(u,v)|+\epsilon)\).
+            answerable: true
+            output_format: image
+      (c):
+        content: 'Gaussian frequency response fit:'
+        answerable: true
+        output_format: text
         sub_subproblems:
           i.:
-            content: \[min\_k\sum\_{u,v}\Big{|}H_{\rm cont}(u,v)-∣H_{\rm DFT}(u,v)∣^2\]
+            content: 'The frequency-domain representation of a Gaussian kernel can be modeled as: \[H_{\rm cont}(u,v)=\exp\Big{(}-k\,(U^{2}+V^{2})\Big{)},\quad U=u-\frac{M-1}{2}, \;V=v-\frac{N-1}{2}\]'
+            answerable: true
+            output_format: text
           ii.:
-            content: where H\_DFT(u,v) is the previously computed 1036×1036-point centered DFT of the kernel.
-      (c):
-        content: Report the optimized k\_opt obtained from the previous sweep and plot in a single figure the magnitude spectrum of the Gaussian fit |H\_cont(u,v)| along with its inverse 1/(∣H\_cont(u,v)∣+ε).
-        sub_subproblems: {}
-  Problem 4:
-    content: 'Restore the original image by applying the previously computed inverse responses (both from the direct kernel DFT and the Gaussian fit) and reconstruct the images using the inverse DFT. Plot in a single figure and compare:'
-    subproblems:
-      (a):
-        content: The original image.
-        sub_subproblems: {}
-      (b):
-        content: The restored image using the direct kernel inverse response.
-        sub_subproblems: {}
-      (c):
-        content: The restored image using the Gaussian fit inverse response.
-        sub_subproblems: {}
+            content: 'Sweep \(k\) over the range \(10^{-6}\) to \(10^{-3}\) and find the value that minimizes the error: \[\min_{k}\sum_{u,v}\Big{|}H_{\rm cont}(u,v)-|H_{\rm DFT}(u,v)|\Big{|}^{2}\]'
+            answerable: true
+            output_format: text
+          iii.:
+            content: Report the optimized \(k_{\rm opt}\) obtained from the previous sweep and plot in a single figure the magnitude spectrum of the Gaussian fit \(|H_{\rm cont}(u,v)|\) along with its inverse \(1/(|H_{\rm cont}(u,v)|+\epsilon)\).
+            answerable: true
+            output_format: image+text
       (d):
-        content: Compute and report the Mean Squared Error (MSE) between the original image and each reconstructed image and comment on which method gives better restoration and why.
-        sub_subproblems: {}
+        content: 'Restore the original image by applying the previously computed inverse responses (both from the direct kernel DFT and the Gaussian fit) and reconstruct the images using the inverse DFT. Plot in a single figure and compare:'
+        answerable: true
+        output_format: image+text
+        sub_subproblems:
+          i.:
+            content: The original image.
+            answerable: true
+            output_format: image
+          ii.:
+            content: The restored image using the direct kernel inverse response.
+            answerable: true
+            output_format: image
+          iii.:
+            content: The restored image using the Gaussian fit inverse response.
+            answerable: true
+            output_format: image
+          iv.:
+            content: Compute and report the Mean Squared Error (MSE) between the original image and each reconstructed image and comment on which method gives better restoration and why.
+            answerable: true
+            output_format: text

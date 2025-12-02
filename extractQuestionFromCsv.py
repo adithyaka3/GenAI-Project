@@ -9,10 +9,11 @@ def save_problem_to_file(problem_obj, filename: str):
         print(f"⚠️ Skipping {filename} — Result is None.")
         return
 
-    # Check if the object is empty (Parsed but found no tags)
-    if not problem_obj.problems and not problem_obj.global_context:
+    # Check if the object is empty
+    if not problem_obj.problems:
         print(f"⚠️ Warning: {filename} was saved but contains NO data (Regex failed).")
 
+    # model_dump(mode='json') automatically handles the nested structure
     data = problem_obj.model_dump(mode='json')
 
     with open(filename, "w", encoding="utf-8") as f:
@@ -45,14 +46,12 @@ def extract_questions_from_csv(file_path):
         # Check for variation in string formatting
         if 'start of a new question' in start_type:
             if current_question_parts:
-                # Join with newline to help LLM see structure
                 questions_list.append("\n".join(current_question_parts))
                 current_question_parts = []
             
             current_question_parts.append(text_segment)
         else:
             if current_question_parts or (not current_question_parts and text_segment.strip()):
-                # Append if we are in a question OR if it's the very first non-empty line
                 current_question_parts.append(text_segment)
     
     if current_question_parts:
@@ -77,6 +76,7 @@ if __name__ == "__main__":
     output_dir = 'yaml_parsed_questions'
     os.makedirs(output_dir, exist_ok=True)
 
+    # Clean previous runs
     for f in os.listdir(output_dir):
         os.remove(os.path.join(output_dir, f))
 
@@ -85,7 +85,6 @@ if __name__ == "__main__":
         print("="*40)
         print(f"\nProcessing question {i+1}/{len(questions)}...")
         
-        # Skip empty questions
         if not question.strip():
             print("Skipping empty text block.")
             continue

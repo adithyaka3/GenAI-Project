@@ -1,62 +1,103 @@
-# author : Adithya
-import torch
-import re
-import yaml
 import os
+import re
+import json
+import time
+import random
+import boto3
 from typing import Dict, Optional
-from pydantic import BaseModel, Field, ValidationError
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    pipeline,
+from pydantic import BaseModel, Field
+
+# ==========================================
+# 1. AWS Bedrock Client Setup
+# ==========================================
+
+bedrock = boto3.client(
+    "bedrock-runtime",
+    region_name=os.getenv("BEDROCK_REGION", "us-east-1"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
 )
 
 # ==========================================
-# 1. Configuration & Model Setup
+# 2. Helper: Exponential Backoff
 # ==========================================
 
-MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
+def bedrock_call_with_backoff(model_id: str, body: dict):
+    max_attempts = 8
+    delay = 1.0
 
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,
-)
+    for attempt in range(max_attempts):
+        try:
+            response = bedrock.invoke_model(
+                modelId=model_id,
+                body=json.dumps(body),
+                contentType="application/json",
+                accept="application/json",
+            )
+            return response
 
-print(f"Loading {MODEL_ID}...")
-try:
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        quantization_config=bnb_config,
-        device_map="auto",
+        except bedrock.exceptions.ThrottlingException:
+            if attempt == max_attempts - 1:
+                raise
+
+            sleep_time = delay + random.uniform(0, 0.5)
+            print(f"⚠️ Throttled. Retrying in {sleep_time:.2f}s...")
+            time.sleep(sleep_time)
+            delay *= 2  # exponential backoff
+
+        except Exception as e:
+            if "ValidationException" in str(e):
+                print(f"❌ Validation Error. Request Body sent: {json.dumps(body, indent=2)}")
+            raise RuntimeError(f"Bedrock Error: {e}")
+
+# ==========================================
+# 3. LLaMA-3 Specific Formatting
+# ==========================================
+
+def format_llama3_prompt(user_message: str, system_message: str) -> str:
+    formatted = (
+        f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+        f"{system_message}<|eot_id|>"
+        f"<|start_header_id|>user<|end_header_id|>\n\n"
+        f"{user_message}<|eot_id|>"
+        f"<|start_header_id|>assistant<|end_header_id|>\n\n"
     )
-except Exception as e:
-    print(f"Error loading model: {e}")
-    exit()
+    return formatted
 
-generate_pipe = pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    max_new_tokens=4096,
-    temperature=0.1,
-    top_p=0.95,
-    repetition_penalty=1.15,
-    return_full_text=False, 
-)
+def generate_with_bedrock_llama(prompt_content: str, model_id: str):
+    system_instruction = (
+        "You are a STRICT Data Extraction Engine. "
+        "Output ONLY valid XML-like tags. "
+        "Do NOT output conversational text."
+    )
+
+    final_prompt = format_llama3_prompt(user_message=prompt_content, system_message=system_instruction)
+
+    body = {
+        "prompt": final_prompt,
+        "max_gen_len": 4096, # Increased for larger questions
+        "temperature": 0.1,
+        "top_p": 0.9,
+    }
+
+    response = bedrock_call_with_backoff(model_id, body)
+    data = json.loads(response["body"].read())
+    return data["generation"]
 
 # ==========================================
-# 2. Pydantic Schema
+# 4. Data Models (Pydantic)
 # ==========================================
 
 class SubSubProblem(BaseModel):
     content: str
+    answerable: bool = False
+    output_format: str = "text"
 
 class SubProblem(BaseModel):
     content: str
+    answerable: bool = False
+    output_format: str = "text"
     sub_subproblems: Optional[Dict[str, SubSubProblem]] = Field(default_factory=dict)
 
 class Problem(BaseModel):
@@ -64,138 +105,162 @@ class Problem(BaseModel):
     subproblems: Optional[Dict[str, SubProblem]] = Field(default_factory=dict)
 
 class ProblemTree(BaseModel):
-    global_context: str = ""
     problems: Dict[str, Problem]
 
-
 # ==========================================
-# 3. Prompt
-# ==========================================
-
-TEMPLATE = """
-<s>[INST]
-You are a STRICT Data Extraction Engine.
-
-YOUR GOAL:
-Extract the text exactly as it appears. 
-Do NOT escape backslashes. Do NOT indent for structure. 
-Simply wrap the exact text in the specific tags defined below.
-
-=====================================================
-HIERARCHY & TAG RULES
-=====================================================
-
-1. **Global Context**: Wrap in `<GLOBAL_CONTEXT> ... </GLOBAL_CONTEXT>`
-2. **Problems**: Wrap in `<PROBLEM id="1"> ... </PROBLEM>`. 
-   - The `id` should match the question number (e.g., 1, 2).
-3. **Content**: Wrap the text description in `<CONTENT> ... </CONTENT>`.
-4. **Subproblems**: Wrap in `<SUBPROBLEM id="(a)"> ... </SUBPROBLEM>`.
-5. **Sub-subproblems**: Wrap in `<SUBSUB id="i."> ... </SUBSUB>`.
-
-=====================================================
-ONE-SHOT EXAMPLE
-=====================================================
-
-INPUT:
-Let $f(x) = x^2$.
-1. Find x.
-(a) If x > 0.
-i. Verify graph.
-
-OUTPUT:
-<GLOBAL_CONTEXT>
-Let $f(x) = x^2$.
-</GLOBAL_CONTEXT>
-
-<PROBLEM id="1">
-  <CONTENT>Find x.</CONTENT>
-  <SUBPROBLEM id="(a)">
-    <CONTENT>If x > 0.</CONTENT>
-    <SUBSUB id="i.">
-      <CONTENT>Verify graph.</CONTENT>
-    </SUBSUB>
-  </SUBPROBLEM>
-</PROBLEM>
-
-=====================================================
-REAL INPUT TEXT (COPY EXACTLY):
-{question_text}
-
-OUTPUT ONLY THE TAGGED TEXT:
-[/INST]
-"""
-
-# ==========================================
-# 4. Robust Regex Parser
+# 5. Extraction Logic (Regex)
 # ==========================================
 
 def extract_tag_content(text: str, tag_name: str) -> str:
+    """Extracts the raw content inside a specific tag."""
+    pattern = f"<{tag_name}.*?>(.*?)</{tag_name}>"
+    m = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    return m.group(1).strip() if m else ""
+
+def clean_text_from_tags(raw_text: str, tags_to_remove: list[str]) -> str:
     """
-    Helper to extract content between simple tags like <CONTENT>.
-    Case-insensitive matching for tags.
+    Removes specific child tag blocks (e.g., <SUBPROBLEM>...</SUBPROBLEM>) 
+    from a string to isolate the parent's text content.
     """
-    pattern = f"<{tag_name}>(.*?)</{tag_name}>"
-    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-    return match.group(1).strip() if match else ""
+    cleaned = raw_text
+    for tag in tags_to_remove:
+        # Regex to remove <TAG ...> ... </TAG>
+        pattern = f"<{tag}.*?>.*?</{tag}>"
+        cleaned = re.sub(pattern, "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    return cleaned.strip()
+
+def str_to_bool(val: str) -> bool:
+    return val.strip().lower() == 'true'
+
+# UPDATED PROMPT: Content tag removed, structure simplified.
+TEMPLATE = """
+You are a STRICT Data Extraction Engine.
+
+YOUR JOB:
+1. Copy the input text EXACTLY.
+2. Structure it using ONLY the tags below.
+3. Put the text DIRECTLY inside the Problem/Subproblem tags.
+
+REQUIRED STRUCTURE:
+---------------------
+<PROBLEM id="1">
+    ... (Text of the main problem) ...
+
+    <SUBPROBLEM id="(a)">
+        ... (Text of subproblem a) ...
+
+        <ANSWERABLE>true/false</ANSWERABLE>
+        <OUTPUT_FORMAT>text | image | image+text</OUTPUT_FORMAT>
+
+        <SUBSUB id="i.">
+             ... (Text of sub-subproblem i) ...
+             <ANSWERABLE>true</ANSWERABLE>
+             <OUTPUT_FORMAT>text</OUTPUT_FORMAT>
+        </SUBSUB>
+    </SUBPROBLEM>
+</PROBLEM>
+---------------------
+
+RULES:
+- Do NOT use <CONTENT> tags. Put text directly in the parent tag.
+- Do NOT use <GLOBAL_CONTEXT>.
+- Do NOT skip any text from the input.
+- Do NOT summarize or fix math/latex.
+- If a subproblem exists, the parent <PROBLEM> text should contains ONLY the intro text, not the subproblem text.
+
+INPUT TEXT:
+{question_text}
+
+OUTPUT:
+"""
 
 def parse_problem_text(raw_text: str) -> Optional[ProblemTree]:
     try:
-        print(f"Genering Output for {len(raw_text)} chars input...")
+        print(f"Processing text ({len(raw_text)} chars)...")
+        final_user_message = TEMPLATE.replace("{question_text}", raw_text)
         
-        # 1. Generate
-        final_prompt = TEMPLATE.replace("{question_text}", raw_text)
-        outputs = generate_pipe(final_prompt)
-        generated_text = outputs[0]["generated_text"]
+        LLAMA_MODEL = "meta.llama3-70b-instruct-v1:0"
+        
+        print(f"Calling {LLAMA_MODEL}...")
+        generated_text = generate_with_bedrock_llama(final_user_message, LLAMA_MODEL)
+        
+        print(f"Raw Output start: {generated_text[:200]}...")
 
-        # 2. Extract Global Context
-        global_context = extract_tag_content(generated_text, "GLOBAL_CONTEXT")
-        
-        # 3. Extract Problems
-        problem_pattern = r'<PROBLEM\s+id\s*=\s*["\'](.*?)["\']\s*>(.*?)</PROBLEM>'
-        
+        # 1. Parse Problems
+        problem_pattern = r'<PROBLEM\s+id=["\'](.*?)["\']\s*>(.*?)</PROBLEM>'
         problems_found = {}
 
-        # re.IGNORECASE allows <problem> or <PROBLEM>
-        for p_match in re.finditer(problem_pattern, generated_text, re.DOTALL | re.IGNORECASE):
-            p_id = "Problem " + p_match.group(1)
-            p_body = p_match.group(2)
-            p_content = extract_tag_content(p_body, "CONTENT")
+        for p in re.finditer(problem_pattern, generated_text, re.DOTALL | re.IGNORECASE):
+            pid = "Problem " + p.group(1)
+            p_body = p.group(2)
             
-            # 4. Extract Subproblems
-            subproblem_pattern = r'<SUBPROBLEM\s+id\s*=\s*["\'](.*?)["\']\s*>(.*?)</SUBPROBLEM>'
+            # To get the content of PROBLEM, we must strip out all SUBPROBLEM blocks
+            p_content = clean_text_from_tags(p_body, ["SUBPROBLEM"])
+
+            # 2. Parse Subproblems inside this Problem
+            subproblem_pattern = r'<SUBPROBLEM\s+id=["\'](.*?)["\']\s*>(.*?)</SUBPROBLEM>'
             subprobs_found = {}
-            
-            for sp_match in re.finditer(subproblem_pattern, p_body, re.DOTALL | re.IGNORECASE):
-                sp_id = sp_match.group(1)
-                sp_body = sp_match.group(2)
-                sp_content = extract_tag_content(sp_body, "CONTENT")
+
+            for sp in re.finditer(subproblem_pattern, p_body, re.DOTALL | re.IGNORECASE):
+                spid = sp.group(1)
+                sp_body = sp.group(2)
                 
-                # 5. Extract Sub-Subproblems
-                subsub_pattern = r'<SUBSUB\s+id\s*=\s*["\'](.*?)["\']\s*>(.*?)</SUBSUB>'
+                # Extract Metadata
+                sp_ans_str = extract_tag_content(sp_body, "ANSWERABLE")
+                sp_fmt_str = extract_tag_content(sp_body, "OUTPUT_FORMAT")
+                
+                # To get content of SUBPROBLEM, strip SUBSUB, ANSWERABLE, OUTPUT_FORMAT
+                sp_content = clean_text_from_tags(sp_body, ["SUBSUB", "ANSWERABLE", "OUTPUT_FORMAT"])
+
+                # 3. Parse Sub-subproblems
+                subsub_pattern = r'<SUBSUB\s+id=["\'](.*?)["\']\s*>(.*?)</SUBSUB>'
                 subsub_found = {}
-                
-                for ssp_match in re.finditer(subsub_pattern, sp_body, re.DOTALL | re.IGNORECASE):
-                    ssp_id = ssp_match.group(1)
-                    ssp_body = ssp_match.group(2)
-                    ssp_content = extract_tag_content(ssp_body, "CONTENT")
-                    subsub_found[ssp_id] = SubSubProblem(content=ssp_content)
 
-                subprobs_found[sp_id] = SubProblem(content=sp_content, sub_subproblems=subsub_found)
+                for ss in re.finditer(subsub_pattern, sp_body, re.DOTALL | re.IGNORECASE):
+                    ssid = ss.group(1)
+                    ss_body = ss.group(2)
+                    
+                    ss_ans_str = extract_tag_content(ss_body, "ANSWERABLE")
+                    ss_fmt_str = extract_tag_content(ss_body, "OUTPUT_FORMAT")
+                    
+                    # Content is everything except metadata tags
+                    ss_content = clean_text_from_tags(ss_body, ["ANSWERABLE", "OUTPUT_FORMAT"])
+                    
+                    subsub_found[ssid] = SubSubProblem(
+                        content=ss_content,
+                        answerable=str_to_bool(ss_ans_str),
+                        output_format=ss_fmt_str
+                    )
 
-            problems_found[p_id] = Problem(content=p_content, subproblems=subprobs_found)
+                subprobs_found[spid] = SubProblem(
+                    content=sp_content,
+                    answerable=str_to_bool(sp_ans_str),
+                    output_format=sp_fmt_str,
+                    sub_subproblems=subsub_found
+                )
 
-        tree = ProblemTree(global_context=global_context, problems=problems_found)
-        
-        # Sanity Check
-        if not tree.problems and not tree.global_context:
-            print("❌ Parsing returned empty object. Regex failed to match tags.")
-            # Uncomment below to debug failures
-            # print("RAW TEXT WAS:\n", generated_text)
+            problems_found[pid] = Problem(content=p_content, subproblems=subprobs_found)
+
+        tree = ProblemTree(problems=problems_found)
+
+        if not tree.problems:
+            print("❌ No tags detected in output.")
+            return None
         else:
-            print("✅ Parsed Successfully")
-            
-        return tree
+            print("✅ Parsed Successfully.")
+            return tree
 
     except Exception as e:
-        print(f"❌ Parsing Error: {e}")
+        print(f"❌ Parsing Logic Error: {e}")
         return None
+
+if __name__ == "__main__":
+    # Test Data
+    sample_text = """
+    1. Define X.
+       (a) Calculate Y.
+       (b) Draw Z.
+    """
+    result = parse_problem_text(sample_text)
+    if result:
+        print(result.model_dump_json(indent=2))
